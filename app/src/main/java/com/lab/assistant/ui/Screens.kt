@@ -51,6 +51,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lab.assistant.data.ModelDownloader
 import com.lab.assistant.data.ModelsCatalog
 import com.lab.assistant.data.Prefs
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class VMFactory(private val ctx: Context) : ViewModelProvider.Factory {
@@ -124,6 +125,7 @@ fun ChatScreen(vm: ChatViewModel) {
 
     LaunchedEffect(id) { if (id == null) vm.newChat() else vm.loadMessages(id!!) }
 
+    Column(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.weight(1f).padding(8.dp), reverseLayout = false) {
         items(msgs, key = { it.uid }) { m ->
             Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -144,6 +146,7 @@ fun ChatScreen(vm: ChatViewModel) {
         }
     }
     Text("Private: no analytics, history stays on device. Delete anytime.", Modifier.padding(horizontal = 12.dp))
+    }
 }
 
 @Composable
@@ -155,10 +158,10 @@ fun ModelsScreen() {
     var temp by remember { mutableFloatStateOf(0.8f) }
     var maxTok by remember { mutableIntStateOf(1024) }
     LaunchedEffect(Unit) {
-        selPath = kotlinx.coroutines.flow.first(Prefs.modelPath(ctx))
-        gpu = kotlinx.coroutines.flow.first(Prefs.gpu(ctx))
-        temp = kotlinx.coroutines.flow.first(Prefs.temp(ctx))
-        maxTok = kotlinx.coroutines.flow.first(Prefs.maxTok(ctx))
+        selPath = Prefs.modelPath(ctx).first()
+        gpu = Prefs.gpu(ctx).first()
+        temp = Prefs.temp(ctx).first()
+        maxTok = Prefs.maxTok(ctx).first()
     }
     LazyColumn(Modifier.fillMaxSize().padding(12.dp)) {
         items(ModelsCatalog.models) { m ->
