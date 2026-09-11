@@ -1,6 +1,9 @@
 package com.lab.assistant.data
 
+import android.app.DownloadManager
 import android.content.Context
+import android.net.Uri
+import android.os.Environment
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
@@ -48,19 +51,60 @@ class ModelDownloadWorker(ctx: Context, params: androidx.work.WorkerParameters) 
 }
 
 object ModelDownloader {
-    fun modelsDir(ctx: Context) = File(ctx.filesDir, "models").apply { mkdirs() }
-    fun fileFor(ctx: Context, m: OpenModel) = File(modelsDir(ctx), m.fileName)
+    const val PUBLIC_SUBDIR = "LabAssistant"
+
+    fun publicDir(): File {
+        val d = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            PUBLIC_SUBDIR
+        )
+        d.mkdirs()
+        return d
+    }
+
+    fun legacyDir(ctx: Context) = File(ctx.filesDir, "models").apply { mkdirs() }
+
+    fun fileFor(ctx: Context, m: OpenModel): File {
+        val pub = File(publicDir(), m.fileName)
+        if (pub.exists()) return pub
+        val leg = File(legacyDir(ctx), m.fileName)
+        if (leg.exists()) return leg
+        return pub
+    }
+
     fun isDownloaded(ctx: Context, m: OpenModel) = fileFor(ctx, m).exists()
 
-    fun enqueue(ctx: Context, m: OpenModel): UUID {
-        val req = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
-            .setInputData(workDataOf("url" to m.url, "file" to m.fileName))
-            .build()
-        WorkManager.getInstance(ctx).enqueue(req)
-        return req.id
+    fun enqueue(ctx: Context, m: OpenModel): Long {
+        val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val req = DownloadManager.Request(Uri.parse(m.url))
+            .setTitle(m.name)
+            .setDescription("Lab Assistant model")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(false)
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "$PUBLIC_SUBDIR/${m.fileName}")
+        return dm.enqueue(req)
     }
+
     fun info(ctx: Context, id: UUID): androidx.lifecycle.LiveData<WorkInfo?> =
         WorkManager.getInstance(ctx).getWorkInfoByIdLiveData(id)
 
-    fun delete(ctx: Context, m: OpenModel) { fileFor(ctx, m).delete() }
+    fun delete(ctx: Context, m: OpenModel) {
+        File(publicDir(), m.fileName).delete()
+        File(legacyDir(ctx), m.fileName).delete()
+        try {
+            val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val q = DownloadManager.Query()
+            val c = dm.query(q)
+            c?.use {
+                while (it.moveToNext()) {
+                    val uri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+                    if (uri != null && uri.endsWith(m.fileName)) {
+                        val did = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_ID))
+                        dm.remove(did)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
 }
