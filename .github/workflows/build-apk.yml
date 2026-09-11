@@ -1,7 +1,5 @@
 name: Build APK
      on: [push, workflow_dispatch]
-       push: null
-       workflow_dispatch: null
      jobs:
        build:
          runs-on: ubuntu-latest
