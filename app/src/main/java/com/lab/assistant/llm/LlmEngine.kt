@@ -40,12 +40,14 @@ class LlmEngine(private val ctx: Context) {
                 LlmInference.LlmInferenceSession.LlmInferenceSessionOptions.builder()
                     .setTemperature(temp).build()
             )
-            session.use {
-                it.addQueryChunk(full)
-                it.generateResponseAsync { partial, done ->
+            try {
+                session.addQueryChunk(full)
+                session.generateResponseAsync { partial, done ->
                     acc += partial
                     onPartial(acc)
                 }
+            } finally {
+                try { session.close() } catch (_: Exception) {}
             }
             val t0 = System.currentTimeMillis()
             while (System.currentTimeMillis() - t0 < 120000) {
